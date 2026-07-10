@@ -1,7 +1,7 @@
 import numpy as np
 
-from spectral_operator.algebra import LinearOperator
-from spectral_operator.geometry import (
+from spectral_operators.algebra import LinearOperator
+from spectral_operators.geometry import (
     SymmetryAnalyzer,
     BoundaryAnalyzer,
     LocalityAnalyzer,

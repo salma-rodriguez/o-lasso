@@ -1,8 +1,8 @@
 import numpy as np
 
-from spectral_operator.algebra import LinearOperator
-from spectral_operator.operators import AdelicOperator
-from spectral_operator.adelic import (
+from spectral_operators.algebra import LinearOperator
+from spectral_operators.operators import AdelicOperator
+from spectral_operators.adelic import (
     LocalComponent,
     AdelicSystem,
     AdelicBuilder,

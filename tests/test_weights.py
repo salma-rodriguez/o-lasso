@@ -1,6 +1,6 @@
 import numpy as np
 
-from spectral_operator.weights import (
+from spectral_operators.weights import (
     WeightOperator,
     PositionWeight,
     PolynomialWeight,

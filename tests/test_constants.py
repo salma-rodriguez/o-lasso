@@ -1,4 +1,4 @@
-from spectral_operator.constants import (
+from spectral_operators.constants import (
     DEFAULT_TOL,
     DEFAULT_ZERO_TOL,
     DEFAULT_NORM,
@@ -33,7 +33,7 @@ def test_plotting_defaults():
 
 
 def test_package_metadata():
-    assert PACKAGE_NAME == "spectral_operator"
+    assert PACKAGE_NAME == "spectral_operators"
     assert isinstance(PACKAGE_VERSION, str)
 
 

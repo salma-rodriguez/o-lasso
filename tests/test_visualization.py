@@ -1,8 +1,8 @@
 import numpy as np
 
-from spectral_operator.algebra import LinearOperator
-from spectral_operator.zeta import ZetaZeroSet, ZetaCorrespondence
-from spectral_operator.visualization import (
+from spectral_operators.algebra import LinearOperator
+from spectral_operators.zeta import ZetaZeroSet, ZetaCorrespondence
+from spectral_operators.visualization import (
     SpectrumData,
     MatrixData,
     GeometryData,

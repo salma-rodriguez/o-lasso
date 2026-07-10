@@ -1,7 +1,7 @@
 import numpy as np
 
-from spectral_operator.algebra import LinearOperator
-from spectral_operator.diagnostics import (
+from spectral_operators.algebra import LinearOperator
+from spectral_operators.diagnostics import (
     OperatorDiagnostics,
     ComparativeDiagnostics,
     StabilityDiagnostics,

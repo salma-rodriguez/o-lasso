@@ -37,13 +37,13 @@ DEFAULT_DPI = 150
 # Metadata
 # ===========================================================================
 
-PACKAGE_NAME = "spectral_operator"
+PACKAGE_NAME = "spectral_operators"
 
 PACKAGE_VERSION = "0.1.0-dev"
 
 AUTHOR = "Salma Y. Rodriguez"
 
-LICENSE = "TBD"
+LICENSE = "MIT"
 
 
 # ===========================================================================

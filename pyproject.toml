@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "spectral-operator"
+name = "spectral-operators"
 version = "0.1.0"
 description = "A modular Python framework for spectral operator theory, numerical linear algebra, and scientific computing."
 readme = "README.md"
@@ -48,7 +48,7 @@ Issues = "https://github.com/<your-username>/spectral-universe/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["spectral_operator*"]
+include = ["spectral_operators*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
