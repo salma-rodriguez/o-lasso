@@ -1,13 +1,17 @@
-# Spectral Operator
+# Operator Universe
 
-*A modular Python framework for spectral operator theory, numerical linear algebra, and scientific computing.*
+*A modular Python framework for operator theory, numerical linear algebra, and scientific computing.*
 
 ---
 
 ## Overview
 
-**Spectral Operator** is an open-source Python library providing a modular framework for constructing, analyzing, and 
-experimenting with linear operators from a spectral perspective.
+**Spectral Unvierse** is an open-source Python library providing a modular framework for constructing, analyzing, and 
+experimenting with many types of operators. Currently the library includes a **Spectral Operators** subpackage. Future 
+operators are highlighted under **Future Directions**.
+
+**Spectral Operator** is a Python subpackage within the **Spectral Universe** library providing a modular framework for 
+constructing, analyzing, and experimenting with linear operators from a spectral perspective.
 
 Originally motivated by research into operator-theoretic approaches to the Riemann Hypothesis, the library has evolved 
 into a general-purpose toolkit for finite-dimensional spectral analysis, numerical operator theory, and scientific 
@@ -142,14 +146,30 @@ core spectral operator framework.
 Planned areas of development include:
 
 * additional operator families,
-* stochastic and diffusion operators,
-* quantum-inspired operators,
-* graph-based operators,
 * performance optimization,
 * GPU acceleration,
 * expanded visualization,
 * additional numerical algorithms,
 * and broader scientific applications.
+
+## Long-Term Vision
+
+The Spectral Universe project is designed as a modular framework for operator-based scientific computing. While the 
+current release focuses on spectral operator theory, the architecture is intended to support additional operator 
+families, including:
+
+- Spectral operators
+- Stochastic operators
+- Quantum-inspired operators
+- Laplacian operators
+- Nonlinear differential operators
+- Integral operators
+- Graph operators
+- Evolution operators
+- Diffusion operators
+- Fractional operators
+- Pseudodifferential operators
+- Optimization and variational operators
 
 ---
 
