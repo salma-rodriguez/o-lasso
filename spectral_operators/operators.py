@@ -1,6 +1,6 @@
 """
-rh_operator.operators
-=====================
+spectral_operators.operators
+============================
 
 Concrete operator implementations.
 
@@ -22,7 +22,6 @@ from .core.exceptions import (
 )
 from .core.utilities import (
     as_one_dimensional_array,
-    as_two_dimensional_array,
     normalize_l1,
     require_positive_integer,
     require_positive_real,
@@ -63,6 +62,9 @@ class FiniteDifferenceOperator(LinearOperator):
         dtype=float,
         name: str | None = None,
     ):
+
+        N = require_positive_integer(N, name="N")
+        L = require_positive_real(L, name="L")
 
         if N < 2:
             raise OperatorError("N must be at least 2.")
@@ -249,6 +251,8 @@ class WeightedOperator(LinearOperator):
                 "weight must be a matrix, LinearOperator, or one-dimensional vector."
             )
 
+        W.setflags(write=False)
+
         return W
 
 
@@ -280,20 +284,21 @@ class GradedOperator(LinearOperator):
 
         A = operator.matrix
         A_adj = operator.adjoint.matrix
+        dtype = np.result_type(A, A_adj)
 
-        zero_top = np.zeros((A.shape[0], A_adj.shape[1]), dtype=A.dtype)
-        zero_bottom = np.zeros((A_adj.shape[0], A.shape[1]), dtype=A.dtype)
+        top_left = np.zeros((operator.rows, operator.rows), dtype=dtype)
+        bottom_right = np.zeros((operator.cols, operator.cols), dtype=dtype)
 
-        matrix = np.block([
-            [zero_top, A],
-            [A_adj, zero_bottom],
+        graded = np.block([
+            [top_left, A],
+            [A_adj, bottom_right],
         ])
 
         if name is None:
             name = f"Graded({operator.name})"
 
         super().__init__(
-            matrix=matrix,
+            matrix=graded,
             name=name,
             metadata={
                 "operator": "graded",
@@ -301,6 +306,8 @@ class GradedOperator(LinearOperator):
                 "base_shape": operator.shape,
             },
         )
+
+        object.__setattr__(self, "base_operator", operator)
 
 
 # ===========================================================================
@@ -358,8 +365,16 @@ class HamiltonianOperator(LinearOperator):
             metadata={
                 "operator": "hamiltonian",
                 "base_operator": operator.name,
-                "hermitian": enforce_hermitian,
+                "hermitian_enforced": enforce_hermitian,
             },
+        )
+
+
+        object.__setattr__(self, "base_operator", operator)
+        object.__setattr__(
+            self,
+            "enforce_hermitian",
+            enforce_hermitian
         )
 
 
@@ -390,76 +405,91 @@ class AdelicOperator(LinearOperator):
         normalize: bool = True,
         name: str | None = None,
     ):
+        operators = tuple(local_operators)
 
-        if len(local_operators) == 0:
+        if not operators:
             raise OperatorError(
                 "AdelicOperator requires at least one local operator."
             )
 
-        for op in local_operators:
-            if not isinstance(op, LinearOperator):
-                raise OperatorError(
-                    "All local components must be LinearOperator instances."
-                )
+        if not all(
+            isinstance(op, LinearOperator) for op in operators
+        ):
+            raise OperatorError(
+                "All local components must be LinearOperator instances."
+            )
 
-        shape = local_operators[0].shape
+        shape = operators[0].shape
 
-        for op in local_operators:
-            if op.shape != shape:
-                raise OperatorError(
-                    "All local operators must have the same shape."
-                )
+        for op in operators[1:]:
+            require_same_shape(
+                operators[0],
+                op,
+                left_name=operators[0].name,
+                right_name=op.name
+            )
 
-        m = len(local_operators)
+        count = len(operators)
 
         if weights is None:
-            weights = np.ones(m, dtype=float)
+            weight_array = np.ones(count, dtype=float)
         else:
-            weights = np.asarray(weights)
+            weight_array = as_one_dimensional_array(
+                weights,
+                name="weights",
+                copy=True,
+            )
 
-        if weights.ndim != 1 or len(weights) != m:
-            raise OperatorError(
-                "weights must be one-dimensional and match local_operators."
+        if len(weight_array) != count:
+            raise DimensionMismatchError(
+                "weights must match the number of local operators"
             )
 
         if normalize:
-            total = np.sum(np.abs(weights))
-            if total == 0:
-                raise OperatorError(
-                    "Cannot normalize zero adelic weights."
-                )
-            weights = weights / total
-
-        matrix = np.zeros(shape, dtype=np.result_type(
-            *[op.matrix for op in local_operators],
-            weights
-        ))
-
-        for w, op in zip(weights, local_operators):
-            matrix = matrix + w * op.matrix
-
-        if labels is None:
-            labels = list(range(m))
-
-        if len(labels) != m:
-            raise OperatorError(
-                "labels must match local_operators."
+            weight_array = normalize_l1(
+                weight_array,
+                name="weights",
             )
 
-        if name is None:
-            name = "AdelicOperator"
+        if labels is None:
+            label_tuple = tuple(range(count))
+        else:
+            label_tuple = tuple(labels)
+
+        if len(label_tuple) != count:
+            raise DimensionMismatchError(
+                "labels must match the number of local operators."
+            )
+
+        dtype = np.result_type(
+            weight_array.dtype,
+            *(operator.dtype for operator in operators),
+        )
+
+        matrix = np.zeros(shape, dtype=dtype)
+
+        for weight, operator in zip(weight_array, operators):
+            matrix += weight * operator.matrix
 
         super().__init__(
             matrix=matrix,
-            name=name,
+            name=name or "AdelicOperator",
             metadata={
                 "operator": "adelic",
-                "num_local_operators": m,
-                "labels": tuple(labels),
-                "weights": tuple(weights.tolist()),
+                "num_local_operators": count,
+                "labels": label_tuple,
+                "weights": tuple(weight_array.tolist()),
                 "normalize": normalize,
             },
         )
+
+        frozen_weights = np.array(weight_array, copy=True)
+        frozen_weights.setflags(write=False)
+
+        object.__setattr__(self, "local_operators", operators)
+        object.__setattr__(self, "weights", frozen_weights)
+        object.__setattr__(self, "labels", label_tuple)
+        object.__setattr__(self, "normalize", normalize)
 
 
 # ===========================================================================
@@ -488,22 +518,22 @@ class ZetaOperator(LinearOperator):
 
         if not isinstance(operator, LinearOperator):
             raise OperatorError(
-                "operator must be a LinearOperator."
+                "operator must be a LinearOperator"
             )
 
         if scale == 0:
-            raise OperatorError("scale must be nonzero.")
+            raise OperatorError("scale must be nonzero")
 
         matrix = scale * operator.matrix
 
         if shift != 0:
             if not operator.is_square:
-                raise OperatorError(
-                    "shift can only be applied to square operators."
+                raise NotSquareOperatorError(
+                    "shift can only be applied to square operators"
                 )
             matrix = matrix + shift * np.eye(
                 operator.rows,
-                dtype=matrix.dtype
+                dtype=np.result_type(matrix, shift),
             )
 
         if name is None:

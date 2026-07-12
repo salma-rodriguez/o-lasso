@@ -1,24 +1,60 @@
 """
-rh_operator.geometry
-====================
+spectral_operators.geometry
+====================+++++++
 
 Geometric diagnostics for LinearOperator objects.
 
-This module contains tools for studying symmetry, locality,
-boundary effects, operator-induced geometry, and related
-diagnostics.
+This module provides symmetry, boundary, locality, and combined
+operator-geometry diagnostics.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from .core.algebra import LinearOperator, OperatorError
+from .core.algebra import LinearOperator
+from .core.exceptions import OperatorError
+from .core.utilities import (
+    readonly_array,
+    require_nonnegative_integer,
+    require_positive_integer,
+    require_probability,
+)
 
 
 # ===========================================================================
-# Symmetry Diagnostics
+# Shared Helpers
 # ===========================================================================
+
+
+def _validate_operator(operator: LinearOperator) -> LinearOperator:
+    """
+    Validate and return a LinearOperator.
+    """
+
+    if not isinstance(operator, LinearOperator):
+        raise OperatorError(
+            "operator must be a LinearOperator."
+        )
+
+    return operator
+
+
+def _relative_defect(
+    defect: float,
+    operator: LinearOperator,
+) -> float:
+    """
+    Normalize a defect by the operator's Frobenius norm.
+    """
+
+    denominator = operator.norm("fro")
+
+    if denominator == 0:
+        return 0.0
+
+    return float(defect / denominator)
+
 
 # ===========================================================================
 # Symmetry Diagnostics
@@ -26,41 +62,80 @@ from .core.algebra import LinearOperator, OperatorError
 
 class SymmetryAnalyzer:
     """
-    Analyze symmetry, skew-symmetry, Hermitian structure, and related defects.
+    Analyze symmetric, skew-symmetric, Hermitian, and anti-Hermitian
+    structure.
     """
 
     def __init__(self, operator: LinearOperator):
+        object.__setattr__(
+            self,
+            "operator",
+            _validate_operator(operator),
+        )
 
-        if not isinstance(operator, LinearOperator):
-            raise OperatorError("operator must be a LinearOperator.")
-
-        self.operator = operator
-
-
-    def symmetric_defect(self, *, relative: bool = False) -> float:
+    def antihermitian_defect(
+        self,
+        *,
+        relative: bool = False,
+    ) -> float:
         """
-        Measure the defect from symmetry.
+        Measure the defect from anti-Hermitian structure.
 
         Computes
 
-            ||A - A^T||_F
-
-        or the relative defect
-
-            ||A - A^T||_F / ||A||_F.
+            ||A + A†||_F.
         """
 
-        A = self.operator.matrix
-        defect = np.linalg.norm(A - A.T, ord="fro")
+        matrix = self.operator.matrix
+        defect = float(
+            np.linalg.norm(
+                matrix + matrix.conj().T,
+                ord="fro",
+            )
+        )
 
         if relative:
-            denom = self.operator.norm("fro")
-            return float(defect / denom) if denom != 0 else 0.0
+            return _relative_defect(
+                defect,
+                self.operator,
+            )
 
-        return float(defect)
+        return defect
 
+    def hermitian_defect(
+        self,
+        *,
+        relative: bool = False,
+    ) -> float:
+        """
+        Measure the defect from Hermitian structure.
 
-    def skew_defect(self, *, relative: bool = False) -> float:
+        Computes
+
+            ||A - A†||_F.
+        """
+
+        matrix = self.operator.matrix
+        defect = float(
+            np.linalg.norm(
+                matrix - matrix.conj().T,
+                ord="fro",
+            )
+        )
+
+        if relative:
+            return _relative_defect(
+                defect,
+                self.operator,
+            )
+
+        return defect
+
+    def skew_defect(
+        self,
+        *,
+        relative: bool = False,
+    ) -> float:
         """
         Measure the defect from skew-symmetry.
 
@@ -69,57 +144,25 @@ class SymmetryAnalyzer:
             ||A + A^T||_F.
         """
 
-        A = self.operator.matrix
-        defect = np.linalg.norm(A + A.T, ord="fro")
+        matrix = self.operator.matrix
+        defect = float(
+            np.linalg.norm(
+                matrix + matrix.T,
+                ord="fro",
+            )
+        )
 
         if relative:
-            denom = self.operator.norm("fro")
-            return float(defect / denom) if denom != 0 else 0.0
+            return _relative_defect(
+                defect,
+                self.operator,
+            )
 
-        return float(defect)
-
-
-    def hermitian_defect(self, *, relative: bool = False) -> float:
-        """
-        Measure the defect from Hermitian/self-adjoint structure.
-
-        Computes
-
-            ||A - A†||_F.
-        """
-
-        A = self.operator.matrix
-        defect = np.linalg.norm(A - A.conj().T, ord="fro")
-
-        if relative:
-            denom = self.operator.norm("fro")
-            return float(defect / denom) if denom != 0 else 0.0
-
-        return float(defect)
-
-
-    def antihermitian_defect(self, *, relative: bool = False) -> float:
-        """
-        Measure the defect from anti-Hermitian/skew-adjoint structure.
-
-        Computes
-
-            ||A + A†||_F.
-        """
-
-        A = self.operator.matrix
-        defect = np.linalg.norm(A + A.conj().T, ord="fro")
-
-        if relative:
-            denom = self.operator.norm("fro")
-            return float(defect / denom) if denom != 0 else 0.0
-
-        return float(defect)
-
+        return defect
 
     def summary(self) -> dict:
         """
-        Return a summary of basic symmetry diagnostics.
+        Return symmetry diagnostic results.
         """
 
         return {
@@ -131,11 +174,44 @@ class SymmetryAnalyzer:
             "skew_defect": self.skew_defect(),
             "hermitian_defect": self.hermitian_defect(),
             "antihermitian_defect": self.antihermitian_defect(),
-            "relative_symmetric_defect": self.symmetric_defect(relative=True),
-            "relative_skew_defect": self.skew_defect(relative=True),
-            "relative_hermitian_defect": self.hermitian_defect(relative=True),
-            "relative_antihermitian_defect": self.antihermitian_defect(relative=True),
+            "relative_symmetric_defect":
+                self.symmetric_defect(relative=True),
+            "relative_skew_defect":
+                self.skew_defect(relative=True),
+            "relative_hermitian_defect":
+                self.hermitian_defect(relative=True),
+            "relative_antihermitian_defect":
+                self.antihermitian_defect(relative=True),
         }
+
+    def symmetric_defect(
+        self,
+        *,
+        relative: bool = False,
+    ) -> float:
+        """
+        Measure the defect from symmetry.
+
+        Computes
+
+            ||A - A^T||_F.
+        """
+
+        matrix = self.operator.matrix
+        defect = float(
+            np.linalg.norm(
+                matrix - matrix.T,
+                ord="fro",
+            )
+        )
+
+        if relative:
+            return _relative_defect(
+                defect,
+                self.operator,
+            )
+
+        return defect
 
 
 # ===========================================================================
@@ -144,10 +220,10 @@ class SymmetryAnalyzer:
 
 class BoundaryAnalyzer:
     """
-    Analyze boundary effects and boundary-localized mass.
+    Analyze boundary-localized operator mass.
 
-    The boundary is defined as the first and last `width` rows/columns
-    of the operator matrix.
+    The boundary consists of the first and last ``width`` rows and
+    columns of the matrix representation.
     """
 
     def __init__(
@@ -156,79 +232,60 @@ class BoundaryAnalyzer:
         *,
         width: int = 1,
     ):
+        operator = _validate_operator(operator)
+        width = require_positive_integer(
+            width,
+            name="width",
+        )
 
-        if not isinstance(operator, LinearOperator):
-            raise OperatorError("operator must be a LinearOperator.")
+        if 2 * width > min(operator.shape):
+            raise OperatorError(
+                "width is too large for the operator shape."
+            )
 
-        if width < 1:
-            raise OperatorError("width must be at least 1.")
-
-        if width * 2 > min(operator.shape):
-            raise OperatorError("width is too large for operator shape.")
-
-        self.operator = operator
-        self.width = width
-
+        object.__setattr__(self, "operator", operator)
+        object.__setattr__(self, "width", width)
 
     def boundary_mask(self) -> np.ndarray:
         """
-        Return a boolean mask selecting boundary rows and columns.
+        Return a read-only boolean boundary mask.
         """
 
         rows, cols = self.operator.shape
-        w = self.width
+        width = self.width
 
-        mask = np.zeros((rows, cols), dtype=bool)
+        mask = np.zeros(
+            (rows, cols),
+            dtype=bool,
+        )
 
-        mask[:w, :] = True
-        mask[-w:, :] = True
-        mask[:, :w] = True
-        mask[:, -w:] = True
+        mask[:width, :] = True
+        mask[-width:, :] = True
+        mask[:, :width] = True
+        mask[:, -width:] = True
 
-        return mask
-
-
-    def interior_mask(self) -> np.ndarray:
-        """
-        Return a boolean mask selecting non-boundary entries.
-        """
-
-        return ~self.boundary_mask()
-
+        return readonly_array(
+            mask,
+            name="boundary mask",
+            ndim=2,
+        )
 
     def boundary_norm(self) -> float:
         """
-        Frobenius norm of the boundary-localized entries.
+        Return the Frobenius norm of boundary entries.
         """
 
-        A = self.operator.matrix
-        mask = self.boundary_mask()
-
-        return float(np.linalg.norm(A[mask]))
-
-
-    def interior_norm(self) -> float:
-        """
-        Frobenius norm of the interior entries.
-        """
-
-        A = self.operator.matrix
-        mask = self.interior_mask()
-
-        return float(np.linalg.norm(A[mask]))
-
-
-    def total_norm(self) -> float:
-        """
-        Frobenius norm of the full operator.
-        """
-
-        return self.operator.norm("fro")
-
+        return float(
+            np.linalg.norm(
+                self.operator.matrix[
+                    self.boundary_mask()
+                ]
+            )
+        )
 
     def boundary_ratio(self) -> float:
         """
-        Ratio of boundary norm to total norm.
+        Return boundary norm divided by total norm.
         """
 
         total = self.total_norm()
@@ -236,12 +293,37 @@ class BoundaryAnalyzer:
         if total == 0:
             return 0.0
 
-        return float(self.boundary_norm() / total)
+        return float(
+            self.boundary_norm() / total
+        )
 
+    def interior_mask(self) -> np.ndarray:
+        """
+        Return a read-only boolean interior mask.
+        """
+
+        return readonly_array(
+            ~self.boundary_mask(),
+            name="interior mask",
+            ndim=2,
+        )
+
+    def interior_norm(self) -> float:
+        """
+        Return the Frobenius norm of interior entries.
+        """
+
+        return float(
+            np.linalg.norm(
+                self.operator.matrix[
+                    self.interior_mask()
+                ]
+            )
+        )
 
     def interior_ratio(self) -> float:
         """
-        Ratio of interior norm to total norm.
+        Return interior norm divided by total norm.
         """
 
         total = self.total_norm()
@@ -249,12 +331,13 @@ class BoundaryAnalyzer:
         if total == 0:
             return 0.0
 
-        return float(self.interior_norm() / total)
-
+        return float(
+            self.interior_norm() / total
+        )
 
     def summary(self) -> dict:
         """
-        Return boundary/interior diagnostic summary.
+        Return boundary and interior diagnostics.
         """
 
         return {
@@ -266,6 +349,13 @@ class BoundaryAnalyzer:
             "interior_ratio": self.interior_ratio(),
         }
 
+    def total_norm(self) -> float:
+        """
+        Return the full Frobenius norm.
+        """
+
+        return self.operator.norm("fro")
+
 
 # ===========================================================================
 # Locality Diagnostics
@@ -273,81 +363,145 @@ class BoundaryAnalyzer:
 
 class LocalityAnalyzer:
     """
-    Analyze matrix locality.
-
-    Locality is measured by how concentrated the operator entries are
-    near the main diagonal.
+    Analyze matrix locality relative to the main diagonal.
     """
 
     def __init__(self, operator: LinearOperator):
+        object.__setattr__(
+            self,
+            "operator",
+            _validate_operator(operator),
+        )
 
-        if not isinstance(operator, LinearOperator):
-            raise OperatorError("operator must be a LinearOperator.")
+    def band_mask(
+        self,
+        bandwidth: int,
+    ) -> np.ndarray:
+        """
+        Return a read-only mask selecting ``|i - j| <= bandwidth``.
+        """
 
-        self.operator = operator
+        bandwidth = require_nonnegative_integer(
+            bandwidth,
+            name="bandwidth",
+        )
 
+        mask = (
+            self.distance_matrix()
+            <= bandwidth
+        )
+
+        return readonly_array(
+            mask,
+            name="band mask",
+            ndim=2,
+        )
+
+    def band_norm(
+        self,
+        bandwidth: int,
+    ) -> float:
+        """
+        Return the Frobenius norm inside a diagonal band.
+        """
+
+        return float(
+            np.linalg.norm(
+                self.operator.matrix[
+                    self.band_mask(bandwidth)
+                ]
+            )
+        )
 
     def distance_matrix(self) -> np.ndarray:
         """
-        Return |i - j| for every matrix entry A_ij.
+        Return the read-only matrix ``|i - j|``.
         """
 
         rows, cols = self.operator.shape
-        i = np.arange(rows)[:, None]
-        j = np.arange(cols)[None, :]
 
-        return np.abs(i - j)
+        row_indices = np.arange(rows)[:, None]
+        column_indices = np.arange(cols)[None, :]
 
+        distances = np.abs(
+            row_indices - column_indices
+        )
 
-    def band_mask(self, bandwidth: int) -> np.ndarray:
+        return readonly_array(
+            distances,
+            name="distance matrix",
+            ndim=2,
+        )
+
+    def effective_bandwidth(
+        self,
+        threshold: float = 0.95,
+    ) -> int:
         """
-        Return mask selecting entries with |i - j| <= bandwidth.
-        """
-
-        if bandwidth < 0:
-            raise OperatorError("bandwidth must be nonnegative.")
-
-        return self.distance_matrix() <= bandwidth
-
-
-    def band_norm(self, bandwidth: int) -> float:
-        """
-        Frobenius norm of entries inside a diagonal band.
-        """
-
-        A = self.operator.matrix
-        mask = self.band_mask(bandwidth)
-
-        return float(np.linalg.norm(A[mask]))
-
-
-    def off_band_norm(self, bandwidth: int) -> float:
-        """
-        Frobenius norm of entries outside a diagonal band.
+        Return the smallest bandwidth capturing the requested norm ratio.
         """
 
-        A = self.operator.matrix
+        threshold = require_probability(
+            threshold,
+            name="threshold",
+            inclusive=True,
+        )
+
+        max_bandwidth = max(
+            self.operator.shape
+        ) - 1
+
+        for bandwidth in range(
+            max_bandwidth + 1
+        ):
+            if (
+                self.locality_ratio(bandwidth)
+                >= threshold
+            ):
+                return bandwidth
+
+        return max_bandwidth
+
+    def locality_ratio(
+        self,
+        bandwidth: int,
+    ) -> float:
+        """
+        Return in-band norm divided by total norm.
+        """
+
+        total = self.operator.norm("fro")
+
+        if total == 0:
+            return 0.0
+
+        return float(
+            self.band_norm(bandwidth)
+            / total
+        )
+
+    def off_band_norm(
+        self,
+        bandwidth: int,
+    ) -> float:
+        """
+        Return the Frobenius norm outside a diagonal band.
+        """
+
         mask = ~self.band_mask(bandwidth)
 
-        return float(np.linalg.norm(A[mask]))
+        return float(
+            np.linalg.norm(
+                self.operator.matrix[mask]
+            )
+        )
 
-
-    def locality_ratio(self, bandwidth: int) -> float:
+    def off_locality_ratio(
+        self,
+        bandwidth: int,
+    ) -> float:
         """
-        Ratio of band norm to total Frobenius norm.
-        """
-
-        total = self.operator.norm("fro")
-
-        if total == 0:
-            return 0.0
-
-        return float(self.band_norm(bandwidth) / total)
-
-
-    def off_locality_ratio(self, bandwidth: int) -> float:
-        """
-        Ratio of off-band norm to total Frobenius norm.
+        Return off-band norm divided by total norm.
         """
 
         total = self.operator.norm("fro")
@@ -355,39 +509,43 @@ class LocalityAnalyzer:
         if total == 0:
             return 0.0
 
-        return float(self.off_band_norm(bandwidth) / total)
+        return float(
+            self.off_band_norm(bandwidth)
+            / total
+        )
 
-
-    def effective_bandwidth(self, threshold: float = 0.95) -> int:
+    def summary(
+        self,
+        bandwidth: int = 1,
+    ) -> dict:
         """
-        Smallest bandwidth capturing at least `threshold` of total norm.
+        Return locality diagnostics.
         """
 
-        if not (0.0 <= threshold <= 1.0):
-            raise OperatorError("threshold must satisfy 0 <= threshold <= 1.")
-
-        rows, cols = self.operator.shape
-        max_bw = max(rows, cols)
-
-        for bw in range(max_bw):
-            if self.locality_ratio(bw) >= threshold:
-                return bw
-
-        return max_bw
-
-
-    def summary(self, bandwidth: int = 1) -> dict:
-        """
-        Return locality diagnostic summary.
-        """
+        bandwidth = require_nonnegative_integer(
+            bandwidth,
+            name="bandwidth",
+        )
 
         return {
             "bandwidth": bandwidth,
-            "band_norm": self.band_norm(bandwidth),
-            "off_band_norm": self.off_band_norm(bandwidth),
-            "locality_ratio": self.locality_ratio(bandwidth),
-            "off_locality_ratio": self.off_locality_ratio(bandwidth),
-            "effective_bandwidth_95": self.effective_bandwidth(0.95),
+            "band_norm": self.band_norm(
+                bandwidth
+            ),
+            "off_band_norm": self.off_band_norm(
+                bandwidth
+            ),
+            "locality_ratio": self.locality_ratio(
+                bandwidth
+            ),
+            "off_locality_ratio":
+                self.off_locality_ratio(
+                    bandwidth
+                ),
+            "effective_bandwidth_95":
+                self.effective_bandwidth(
+                    0.95
+                ),
         }
 
 
@@ -397,10 +555,8 @@ class LocalityAnalyzer:
 
 class GeometryAnalyzer:
     """
-    High-level geometric diagnostics for LinearOperator objects.
-
-    This class combines symmetry, boundary, and locality diagnostics
-    into a single interface.
+    High-level interface combining symmetry, boundary, and locality
+    diagnostics.
     """
 
     def __init__(
@@ -409,25 +565,101 @@ class GeometryAnalyzer:
         *,
         boundary_width: int = 1,
     ):
+        operator = _validate_operator(operator)
 
-        if not isinstance(operator, LinearOperator):
-            raise OperatorError("operator must be a LinearOperator.")
-
-        self.operator = operator
-        self.boundary_width = boundary_width
-
-        self.symmetry = SymmetryAnalyzer(operator)
-        self.boundary = BoundaryAnalyzer(
+        symmetry = SymmetryAnalyzer(operator)
+        boundary = BoundaryAnalyzer(
             operator,
             width=boundary_width,
         )
-        self.locality = LocalityAnalyzer(operator)
+        locality = LocalityAnalyzer(operator)
 
+        object.__setattr__(self, "operator", operator)
+        object.__setattr__(
+            self,
+            "boundary_width",
+            boundary.width,
+        )
+        object.__setattr__(self, "symmetry", symmetry)
+        object.__setattr__(self, "boundary", boundary)
+        object.__setattr__(self, "locality", locality)
 
-    def summary(self, *, bandwidth: int = 1) -> dict:
+    def defects(self) -> dict:
+        """
+        Return principal defect diagnostics.
+        """
+
+        return {
+            "symmetric_defect":
+                self.symmetry.symmetric_defect(),
+            "skew_defect":
+                self.symmetry.skew_defect(),
+            "hermitian_defect":
+                self.symmetry.hermitian_defect(),
+            "antihermitian_defect":
+                self.symmetry.antihermitian_defect(),
+            "boundary_ratio":
+                self.boundary.boundary_ratio(),
+        }
+
+    def ratios(
+        self,
+        *,
+        bandwidth: int = 1,
+    ) -> dict:
+        """
+        Return normalized geometry ratios.
+        """
+
+        bandwidth = require_nonnegative_integer(
+            bandwidth,
+            name="bandwidth",
+        )
+
+        return {
+            "relative_symmetric_defect":
+                self.symmetry.symmetric_defect(
+                    relative=True
+                ),
+            "relative_skew_defect":
+                self.symmetry.skew_defect(
+                    relative=True
+                ),
+            "relative_hermitian_defect":
+                self.symmetry.hermitian_defect(
+                    relative=True
+                ),
+            "relative_antihermitian_defect":
+                self.symmetry.antihermitian_defect(
+                    relative=True
+                ),
+            "boundary_ratio":
+                self.boundary.boundary_ratio(),
+            "interior_ratio":
+                self.boundary.interior_ratio(),
+            "locality_ratio":
+                self.locality.locality_ratio(
+                    bandwidth
+                ),
+            "off_locality_ratio":
+                self.locality.off_locality_ratio(
+                    bandwidth
+                ),
+        }
+
+    def summary(
+        self,
+        *,
+        bandwidth: int = 1,
+    ) -> dict:
         """
         Return combined geometry diagnostics.
         """
+
+        bandwidth = require_nonnegative_integer(
+            bandwidth,
+            name="bandwidth",
+        )
 
         return {
             "operator": self.operator.name,
@@ -435,36 +667,7 @@ class GeometryAnalyzer:
             "field": self.operator.field.value,
             "symmetry": self.symmetry.summary(),
             "boundary": self.boundary.summary(),
-            "locality": self.locality.summary(bandwidth=bandwidth),
-        }
-
-
-    def defects(self) -> dict:
-        """
-        Return core defect diagnostics.
-        """
-
-        return {
-            "symmetric_defect": self.symmetry.symmetric_defect(),
-            "skew_defect": self.symmetry.skew_defect(),
-            "hermitian_defect": self.symmetry.hermitian_defect(),
-            "antihermitian_defect": self.symmetry.antihermitian_defect(),
-            "boundary_ratio": self.boundary.boundary_ratio(),
-        }
-
-
-    def ratios(self, *, bandwidth: int = 1) -> dict:
-        """
-        Return normalized geometry ratios.
-        """
-
-        return {
-            "relative_symmetric_defect": self.symmetry.symmetric_defect(relative=True),
-            "relative_skew_defect": self.symmetry.skew_defect(relative=True),
-            "relative_hermitian_defect": self.symmetry.hermitian_defect(relative=True),
-            "relative_antihermitian_defect": self.symmetry.antihermitian_defect(relative=True),
-            "boundary_ratio": self.boundary.boundary_ratio(),
-            "interior_ratio": self.boundary.interior_ratio(),
-            "locality_ratio": self.locality.locality_ratio(bandwidth),
-            "off_locality_ratio": self.locality.off_locality_ratio(bandwidth),
+            "locality": self.locality.summary(
+                bandwidth=bandwidth
+            ),
         }

@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from spectral_operators.core.algebra import LinearOperator
 from spectral_operators.operators import AdelicOperator
@@ -155,3 +156,49 @@ def test_adelic_analyzer_summary():
     assert "component_norms" in summary
     assert "weighted_component_norms" in summary
     assert "weights" in summary
+
+from spectral_operators import (
+    AdelicAnalyzer,
+    AdelicBuilder,
+    AdelicSystem,
+    LinearOperator,
+    LocalComponent,
+)
+from spectral_operators.core.exceptions import (
+    DimensionMismatchError,
+    OperatorError,
+)
+
+
+def test_adelic_system_rejects_duplicate_labels():
+    operator = LinearOperator(np.eye(2))
+
+    with pytest.raises(OperatorError):
+        AdelicSystem([
+            LocalComponent(2, operator),
+            LocalComponent(2, operator),
+        ])
+
+
+def test_adelic_system_rejects_mismatched_shapes():
+    left = LinearOperator(np.eye(2))
+    right = LinearOperator(np.eye(3))
+
+    with pytest.raises(DimensionMismatchError):
+        AdelicSystem([
+            LocalComponent(2, left),
+            LocalComponent(3, right),
+        ])
+
+
+def test_local_operators_returns_tuple():
+    operator = LinearOperator(np.eye(2))
+
+    system = AdelicSystem([
+        LocalComponent(2, operator),
+    ])
+
+    assert isinstance(
+        system.local_operators(),
+        tuple,
+    )

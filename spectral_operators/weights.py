@@ -1,19 +1,28 @@
 """
-rh_operator.weights
-===================
+spectral_operators.weights
+==========================
 
 Weight constructions for operator-theoretic models.
 
-This module contains reusable weight objects used to construct
-weighted operators, position-dependent operators, adelic weights,
-and related weighting schemes.
+This module defines diagonal weight operators, position-dependent
+weight profiles, polynomial and exponential weights, and scalar
+weight systems for prime-indexed and adelic constructions.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from .core.algebra import LinearOperator, OperatorError
+from .core.algebra import LinearOperator
+from .core.exceptions import DimensionMismatchError, OperatorError
+from .core.utilities import (
+    as_one_dimensional_array,
+    normalize_l1,
+    normalize_max_abs,
+    readonly_array,
+    require_positive_integer,
+    require_positive_real,
+)
 
 
 # ===========================================================================
@@ -26,11 +35,14 @@ class WeightOperator(LinearOperator):
 
     Parameters
     ----------
-    weights : array_like
+    weights
         One-dimensional weight values.
 
-    name : str, optional
-        Operator name.
+    dtype
+        Optional NumPy dtype.
+
+    name
+        Human-readable operator name.
     """
 
     def __init__(
@@ -40,22 +52,29 @@ class WeightOperator(LinearOperator):
         dtype=None,
         name: str = "WeightOperator",
     ):
-
-        w = np.asarray(weights, dtype=dtype)
-
-        if w.ndim != 1:
-            raise OperatorError("weights must be one-dimensional.")
+        weight_array = as_one_dimensional_array(
+            weights,
+            name="weights",
+            dtype=dtype,
+            copy=True,
+        )
 
         super().__init__(
-            matrix=np.diag(w),
+            matrix=np.diag(weight_array),
             name=name,
             metadata={
                 "operator": "weight",
-                "dimension": len(w),
+                "dimension": len(weight_array),
             },
         )
 
-        object.__setattr__(self, "weights", w)
+        frozen_weights = readonly_array(
+            weight_array,
+            name="weights",
+            ndim=1,
+        )
+
+        object.__setattr__(self, "weights", frozen_weights)
 
 
 # ===========================================================================
@@ -66,27 +85,11 @@ class PositionWeight(WeightOperator):
     """
     Position-dependent diagonal weight operator.
 
-    Constructs weights on a uniform grid over [-L, L].
+    Constructs
 
-    Parameters
-    ----------
-    N : int
-        Number of grid points.
+        w(x) = offset + scale |x|^power
 
-    L : float
-        Half-length of interval [-L, L].
-
-    power : float
-        Power used in the weight profile.
-
-    scale : float
-        Scaling coefficient.
-
-    offset : float
-        Base offset.
-
-    normalize : bool
-        If True, divide weights by their maximum absolute value.
+    on a uniform grid over ``[-L, L]``.
     """
 
     def __init__(
@@ -101,35 +104,29 @@ class PositionWeight(WeightOperator):
         dtype=float,
         name: str | None = None,
     ):
+        N = require_positive_integer(N, name="N")
+        L = require_positive_real(L, name="L")
 
-        if N < 1:
-            raise OperatorError("N must be positive.")
-
-        if L <= 0:
-            raise OperatorError("L must be positive.")
-
-        x = np.linspace(-L, L, N, dtype=dtype)
-
-        weights = offset + scale * np.abs(x) ** power
+        grid = np.linspace(-L, L, N, dtype=dtype)
+        weights = offset + scale * np.abs(grid) ** power
 
         if normalize:
-            max_abs = np.max(np.abs(weights))
-
-            if max_abs == 0:
-                raise OperatorError("Cannot normalize zero position weights.")
-
-            weights = weights / max_abs
-
-        if name is None:
-            name = "PositionWeight"
+            weights = normalize_max_abs(
+                weights,
+                name="position weights",
+            )
 
         super().__init__(
             weights,
             dtype=dtype,
-            name=name,
+            name=name or "PositionWeight",
         )
 
-        object.__setattr__(self, "grid", x)
+        object.__setattr__(
+            self,
+            "grid",
+            readonly_array(grid, name="grid", ndim=1),
+        )
         object.__setattr__(self, "power", power)
         object.__setattr__(self, "scale", scale)
         object.__setattr__(self, "offset", offset)
@@ -146,9 +143,9 @@ class PolynomialWeight(WeightOperator):
 
     Constructs
 
-        w(x) = c0 + c1 x + c2 x^2 + ...
+        w(x) = c_0 + c_1 x + c_2 x^2 + ...
 
-    on a uniform grid over [-L, L].
+    on a uniform grid over ``[-L, L]``.
     """
 
     def __init__(
@@ -161,44 +158,51 @@ class PolynomialWeight(WeightOperator):
         dtype=float,
         name: str | None = None,
     ):
+        N = require_positive_integer(N, name="N")
+        L = require_positive_real(L, name="L")
 
-        if N < 1:
-            raise OperatorError("N must be positive.")
+        coefficients_array = as_one_dimensional_array(
+            coefficients,
+            name="coefficients",
+            dtype=dtype,
+            copy=True,
+        )
 
-        if L <= 0:
-            raise OperatorError("L must be positive.")
+        grid = np.linspace(-L, L, N, dtype=dtype)
 
-        coeffs = np.asarray(coefficients, dtype=dtype)
-
-        if coeffs.ndim != 1:
-            raise OperatorError("coefficients must be one-dimensional.")
-
-        x = np.linspace(-L, L, N, dtype=dtype)
-
-        weights = np.zeros(N, dtype=dtype)
-
-        for k, c in enumerate(coeffs):
-            weights = weights + c * x**k
+        # np.polynomial.polynomial.polyval uses coefficients in ascending
+        # order: c0, c1, c2, ...
+        weights = np.polynomial.polynomial.polyval(
+            grid,
+            coefficients_array,
+        )
 
         if normalize:
-            max_abs = np.max(np.abs(weights))
-
-            if max_abs == 0:
-                raise OperatorError("Cannot normalize zero polynomial weights.")
-
-            weights = weights / max_abs
-
-        if name is None:
-            name = "PolynomialWeight"
+            weights = normalize_max_abs(
+                weights,
+                name="polynomial weights",
+            )
 
         super().__init__(
             weights,
             dtype=dtype,
-            name=name,
+            name=name or "PolynomialWeight",
         )
 
-        object.__setattr__(self, "grid", x)
-        object.__setattr__(self, "coefficients", coeffs)
+        object.__setattr__(
+            self,
+            "grid",
+            readonly_array(grid, name="grid", ndim=1),
+        )
+        object.__setattr__(
+            self,
+            "coefficients",
+            readonly_array(
+                coefficients_array,
+                name="coefficients",
+                ndim=1,
+            ),
+        )
         object.__setattr__(self, "normalize", normalize)
 
 
@@ -212,9 +216,9 @@ class ExponentialWeight(WeightOperator):
 
     Constructs
 
-        w(x) = offset + scale * exp(rate * |x|^power)
+        w(x) = offset + scale exp(rate |x|^power)
 
-    on a uniform grid over [-L, L].
+    on a uniform grid over ``[-L, L]``.
     """
 
     def __init__(
@@ -230,35 +234,36 @@ class ExponentialWeight(WeightOperator):
         dtype=float,
         name: str | None = None,
     ):
+        N = require_positive_integer(N, name="N")
+        L = require_positive_real(L, name="L")
 
-        if N < 1:
-            raise OperatorError("N must be positive.")
+        grid = np.linspace(-L, L, N, dtype=dtype)
+        weights = offset + scale * np.exp(
+            rate * np.abs(grid) ** power
+        )
 
-        if L <= 0:
-            raise OperatorError("L must be positive.")
-
-        x = np.linspace(-L, L, N, dtype=dtype)
-
-        weights = offset + scale * np.exp(rate * np.abs(x) ** power)
+        if not np.all(np.isfinite(weights)):
+            raise OperatorError(
+                "Exponential weight construction produced non-finite values."
+            )
 
         if normalize:
-            max_abs = np.max(np.abs(weights))
-
-            if max_abs == 0:
-                raise OperatorError("Cannot normalize zero exponential weights.")
-
-            weights = weights / max_abs
-
-        if name is None:
-            name = "ExponentialWeight"
+            weights = normalize_max_abs(
+                weights,
+                name="exponential weights",
+            )
 
         super().__init__(
             weights,
             dtype=dtype,
-            name=name,
+            name=name or "ExponentialWeight",
         )
 
-        object.__setattr__(self, "grid", x)
+        object.__setattr__(
+            self,
+            "grid",
+            readonly_array(grid, name="grid", ndim=1),
+        )
         object.__setattr__(self, "rate", rate)
         object.__setattr__(self, "power", power)
         object.__setattr__(self, "scale", scale)
@@ -270,14 +275,22 @@ class ExponentialWeight(WeightOperator):
 # Prime / Adelic Weights
 # ===========================================================================
 
-# ===========================================================================
-# Prime / Adelic Weights
-# ===========================================================================
-
 class PrimeWeight:
     """
     Scalar weights associated with prime-indexed local operators.
+
+    Notes
+    -----
+    This class validates that supplied values are greater than one,
+    but it does not currently perform primality testing.
     """
+
+    _SUPPORTED_RULES = {
+        "inverse",
+        "log_inverse",
+        "log",
+        "uniform",
+    }
 
     def __init__(
         self,
@@ -286,58 +299,86 @@ class PrimeWeight:
         rule: str = "inverse",
         normalize: bool = True,
     ):
+        prime_array = as_one_dimensional_array(
+            primes,
+            name="primes",
+            dtype=float,
+            copy=True,
+        )
 
-        p = np.asarray(primes, dtype=float)
-
-        if p.ndim != 1:
-            raise OperatorError("primes must be one-dimensional.")
-
-        if np.any(p <= 1):
-            raise OperatorError("prime values must be greater than 1.")
-
-        if rule == "inverse":
-            weights = 1.0 / p
-
-        elif rule == "log_inverse":
-            weights = 1.0 / np.log(p)
-
-        elif rule == "log":
-            weights = np.log(p)
-
-        elif rule == "uniform":
-            weights = np.ones_like(p)
-
-        else:
+        if np.any(~np.isfinite(prime_array)):
             raise OperatorError(
-                "rule must be one of: 'inverse', 'log_inverse', 'log', 'uniform'."
+                "prime values must be finite."
             )
 
+        if np.any(prime_array <= 1):
+            raise OperatorError(
+                "prime values must be greater than 1."
+            )
+
+        if rule not in self._SUPPORTED_RULES:
+            raise OperatorError(
+                "rule must be one of: "
+                "'inverse', 'log_inverse', 'log', or 'uniform'."
+            )
+
+        if rule == "inverse":
+            weights = 1.0 / prime_array
+
+        elif rule == "log_inverse":
+            weights = 1.0 / np.log(prime_array)
+
+        elif rule == "log":
+            weights = np.log(prime_array)
+
+        else:
+            weights = np.ones_like(prime_array)
+
         if normalize:
-            total = np.sum(np.abs(weights))
+            weights = normalize_l1(
+                weights,
+                name="prime weights",
+            )
 
-            if total == 0:
-                raise OperatorError("Cannot normalize zero prime weights.")
-
-            weights = weights / total
-
-        self.primes = p
-        self.rule = rule
-        self.normalize = normalize
-        self.weights = weights
+        object.__setattr__(
+            self,
+            "primes",
+            readonly_array(
+                prime_array,
+                name="primes",
+                ndim=1,
+            ),
+        )
+        object.__setattr__(self, "rule", rule)
+        object.__setattr__(self, "normalize", normalize)
+        object.__setattr__(
+            self,
+            "weights",
+            readonly_array(
+                weights,
+                name="weights",
+                ndim=1,
+            ),
+        )
 
     def as_array(self) -> np.ndarray:
+        """Return a mutable copy of the weight array."""
         return self.weights.copy()
 
-    def as_dict(self) -> dict:
+    def as_dict(self) -> dict[int, float]:
+        """Return a prime-to-weight mapping."""
         return {
-            int(p): float(w)
-            for p, w in zip(self.primes, self.weights)
+            int(prime): float(weight)
+            for prime, weight in zip(
+                self.primes,
+                self.weights,
+            )
         }
 
 
 class AdelicWeight:
     """
-    Weight system for assembling local or adelic operator components.
+    General weight system for assembling labeled local components.
     """
 
     def __init__(
@@ -347,31 +388,53 @@ class AdelicWeight:
         *,
         normalize: bool = True,
     ):
+        label_tuple = tuple(labels)
 
-        labels = tuple(labels)
+        if not label_tuple:
+            raise OperatorError(
+                "labels cannot be empty."
+            )
 
-        if len(labels) == 0:
-            raise OperatorError("labels cannot be empty.")
+        if len(set(label_tuple)) != len(label_tuple):
+            raise OperatorError(
+                "labels must be unique."
+            )
 
         if weights is None:
-            w = np.ones(len(labels), dtype=float)
+            weight_array = np.ones(
+                len(label_tuple),
+                dtype=float,
+            )
         else:
-            w = np.asarray(weights, dtype=float)
+            weight_array = as_one_dimensional_array(
+                weights,
+                name="weights",
+                dtype=float,
+                copy=True,
+            )
 
-        if w.ndim != 1 or len(w) != len(labels):
-            raise OperatorError("weights must match labels.")
+        if len(weight_array) != len(label_tuple):
+            raise DimensionMismatchError(
+                "weights must match the number of labels."
+            )
 
         if normalize:
-            total = np.sum(np.abs(w))
+            weight_array = normalize_l1(
+                weight_array,
+                name="adelic weights",
+            )
 
-            if total == 0:
-                raise OperatorError("Cannot normalize zero adelic weights.")
-
-            w = w / total
-
-        self.labels = labels
-        self.normalize = normalize
-        self.weights = w
+        object.__setattr__(self, "labels", label_tuple)
+        object.__setattr__(self, "normalize", normalize)
+        object.__setattr__(
+            self,
+            "weights",
+            readonly_array(
+                weight_array,
+                name="weights",
+                ndim=1,
+            ),
+        )
 
     @classmethod
     def from_primes(
@@ -381,24 +444,31 @@ class AdelicWeight:
         rule: str = "inverse",
         normalize: bool = True,
     ) -> "AdelicWeight":
-
-        pw = PrimeWeight(
+        prime_weights = PrimeWeight(
             primes,
             rule=rule,
             normalize=normalize,
         )
 
         return cls(
-            labels=tuple(int(p) for p in pw.primes),
-            weights=pw.weights,
+            labels=tuple(
+                int(prime)
+                for prime in prime_weights.primes
+            ),
+            weights=prime_weights.weights,
             normalize=False,
         )
 
     def as_array(self) -> np.ndarray:
+        """Return a mutable copy of the weight array."""
         return self.weights.copy()
 
     def as_dict(self) -> dict:
+        """Return a label-to-weight mapping."""
         return {
             label: float(weight)
-            for label, weight in zip(self.labels, self.weights)
+            for label, weight in zip(
+                self.labels,
+                self.weights,
+            )
         }

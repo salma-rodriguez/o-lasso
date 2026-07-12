@@ -1,21 +1,43 @@
 """
-spectral_operator.adelic
-========================
+spectral_operators.adelic
+=========================
 
 Adelic-style constructions for spectral operator models.
 
-This module contains tools for assembling local components into
-global operators using prime-indexed, place-indexed, or otherwise
-labeled systems.
+This module provides labeled local components, adelic systems,
+global operator assembly, and diagnostics for weighted local-to-global
+operator constructions.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from .core.algebra import LinearOperator, OperatorError
+from .core.algebra import LinearOperator
+from .core.exceptions import (
+    DimensionMismatchError,
+    OperatorError,
+)
+from .core.utilities import require_same_shape
 from .operators import AdelicOperator
-from .weights import AdelicWeight, PrimeWeight
+from .weights import AdelicWeight
+
+
+# ===========================================================================
+# Shared Helpers
+# ===========================================================================
+
+def _validate_system(system: "AdelicSystem") -> "AdelicSystem":
+    """
+    Validate and return an AdelicSystem.
+    """
+
+    if not isinstance(system, AdelicSystem):
+        raise OperatorError(
+            "system must be an AdelicSystem."
+        )
+
+    return system
 
 
 # ===========================================================================
@@ -29,30 +51,49 @@ class LocalComponent:
     Parameters
     ----------
     label
-        Label identifying the local component, such as a prime,
+        Identifier for the local component, such as a prime,
         place, scale, or region.
 
-    operator : LinearOperator
-        Local operator associated with the label.
+    operator
+        LinearOperator associated with the label.
     """
 
-    def __init__(self, label, operator: LinearOperator):
-
+    def __init__(
+        self,
+        label,
+        operator: LinearOperator,
+    ):
         if not isinstance(operator, LinearOperator):
-            raise OperatorError("operator must be a LinearOperator.")
+            raise OperatorError(
+                "operator must be a LinearOperator."
+            )
 
-        self.label = label
-        self.operator = operator
-
-    @property
-    def shape(self):
-        return self.operator.shape
+        object.__setattr__(self, "label", label)
+        object.__setattr__(self, "operator", operator)
 
     @property
-    def matrix(self):
+    def matrix(self) -> np.ndarray:
+        """
+        Return the local operator matrix.
+        """
+
         return self.operator.matrix
 
-    def as_tuple(self):
+    @property
+    def shape(self) -> tuple[int, int]:
+        """
+        Return the local operator shape.
+        """
+
+        return self.operator.shape
+
+    def as_tuple(
+        self,
+    ) -> tuple[object, LinearOperator]:
+        """
+        Return ``(label, operator)``.
+        """
+
         return self.label, self.operator
 
 
@@ -62,7 +103,7 @@ class LocalComponent:
 
 class AdelicSystem:
     """
-    Collection of local components and associated weights.
+    Collection of compatible local components and associated weights.
     """
 
     def __init__(
@@ -72,25 +113,40 @@ class AdelicSystem:
         weights=None,
         normalize: bool = True,
     ):
+        component_tuple = tuple(components)
 
-        if len(components) == 0:
-            raise OperatorError("AdelicSystem requires at least one component.")
+        if not component_tuple:
+            raise OperatorError(
+                "AdelicSystem requires at least one component."
+            )
 
-        for component in components:
-            if not isinstance(component, LocalComponent):
-                raise OperatorError(
-                    "components must be LocalComponent instances."
-                )
+        if not all(
+            isinstance(component, LocalComponent)
+            for component in component_tuple
+        ):
+            raise OperatorError(
+                "components must be LocalComponent instances."
+            )
 
-        shape = components[0].shape
+        reference = component_tuple[0]
 
-        for component in components:
-            if component.shape != shape:
-                raise OperatorError(
-                    "all local components must have the same shape."
-                )
+        for component in component_tuple[1:]:
+            require_same_shape(
+                reference.operator,
+                component.operator,
+                left_name=str(reference.label),
+                right_name=str(component.label),
+            )
 
-        labels = tuple(component.label for component in components)
+        labels = tuple(
+            component.label
+            for component in component_tuple
+        )
+
+        if len(set(labels)) != len(labels):
+            raise OperatorError(
+                "component labels must be unique."
+            )
 
         if weights is None:
             weight_system = AdelicWeight(
@@ -109,14 +165,26 @@ class AdelicSystem:
             )
 
         if tuple(weight_system.labels) != labels:
-            raise OperatorError(
+            raise DimensionMismatchError(
                 "weight labels must match component labels."
             )
 
-        self.components = tuple(components)
-        self.labels = labels
-        self.weights = weight_system
-        self.shape = shape
+        object.__setattr__(
+            self,
+            "components",
+            component_tuple,
+        )
+        object.__setattr__(self, "labels", labels)
+        object.__setattr__(
+            self,
+            "weights",
+            weight_system,
+        )
+        object.__setattr__(
+            self,
+            "shape",
+            reference.shape,
+        )
 
     @classmethod
     def from_operators(
@@ -127,17 +195,36 @@ class AdelicSystem:
         weights=None,
         normalize: bool = True,
     ) -> "AdelicSystem":
+        """
+        Construct a system directly from LinearOperator objects.
+        """
+
+        operator_tuple = tuple(operators)
+
+        if not operator_tuple:
+            raise OperatorError(
+                "operators cannot be empty."
+            )
 
         if labels is None:
-            labels = tuple(range(len(operators)))
+            label_tuple = tuple(
+                range(len(operator_tuple))
+            )
+        else:
+            label_tuple = tuple(labels)
 
-        if len(labels) != len(operators):
-            raise OperatorError("labels must match operators.")
+        if len(label_tuple) != len(operator_tuple):
+            raise DimensionMismatchError(
+                "labels must match the number of operators."
+            )
 
-        components = [
+        components = tuple(
             LocalComponent(label, operator)
-            for label, operator in zip(labels, operators)
-        ]
+            for label, operator in zip(
+                label_tuple,
+                operator_tuple,
+            )
+        )
 
         return cls(
             components,
@@ -145,10 +232,23 @@ class AdelicSystem:
             normalize=normalize,
         )
 
-    def local_operators(self) -> list[LinearOperator]:
-        return [component.operator for component in self.components]
+    def local_operators(
+        self,
+    ) -> tuple[LinearOperator, ...]:
+        """
+        Return the local operators as an immutable tuple.
+        """
+
+        return tuple(
+            component.operator
+            for component in self.components
+        )
 
     def weight_array(self) -> np.ndarray:
+        """
+        Return a mutable copy of the system weights.
+        """
+
         return self.weights.as_array()
 
 
@@ -161,27 +261,31 @@ class AdelicBuilder:
     Builder for assembling adelic-style global operators.
     """
 
-    def __init__(self, system: AdelicSystem):
+    def __init__(
+        self,
+        system: AdelicSystem,
+    ):
+        object.__setattr__(
+            self,
+            "system",
+            _validate_system(system),
+        )
 
-        if not isinstance(system, AdelicSystem):
-            raise OperatorError("system must be an AdelicSystem.")
-
-        self.system = system
-
-    def build(self, *, name: str | None = None) -> AdelicOperator:
+    def build(
+        self,
+        *,
+        name: str | None = None,
+    ) -> AdelicOperator:
         """
-        Build a global AdelicOperator from the local system.
+        Build the global weighted AdelicOperator.
         """
-
-        if name is None:
-            name = "AdelicOperator"
 
         return AdelicOperator(
             self.system.local_operators(),
             weights=self.system.weight_array(),
             labels=self.system.labels,
             normalize=False,
-            name=name,
+            name=name or "AdelicOperator",
         )
 
 
@@ -194,58 +298,86 @@ class AdelicAnalyzer:
     Diagnostics for adelic-style operator systems.
     """
 
-    def __init__(self, system: AdelicSystem):
+    def __init__(
+        self,
+        system: AdelicSystem,
+    ):
+        object.__setattr__(
+            self,
+            "system",
+            _validate_system(system),
+        )
 
-        if not isinstance(system, AdelicSystem):
-            raise OperatorError("system must be an AdelicSystem.")
-
-        self.system = system
-
-    def component_norms(self, kind: str = "fro") -> dict:
+    def component_norms(
+        self,
+        kind: str = "fro",
+    ) -> dict:
         """
-        Return norms of local components.
+        Return norms of the unweighted local components.
         """
 
         return {
-            component.label: component.operator.norm(kind)
+            component.label:
+                component.operator.norm(kind)
             for component in self.system.components
         }
 
-    def weighted_component_norms(self, kind: str = "fro") -> dict:
+    def summary(
+        self,
+        kind: str = "fro",
+    ) -> dict:
         """
-        Return weighted local component norms.
-        """
-
-        weights = self.system.weight_array()
-
-        return {
-            component.label: float(abs(w) * component.operator.norm(kind))
-            for component, w in zip(self.system.components, weights)
-        }
-
-    def weight_summary(self) -> dict:
-        """
-        Return information about the adelic weights.
-        """
-
-        weights = self.system.weight_array()
-
-        return {
-            "labels": self.system.labels,
-            "weights": tuple(weights.tolist()),
-            "sum_abs_weights": float(np.sum(np.abs(weights))),
-            "num_components": len(weights),
-        }
-
-    def summary(self) -> dict:
-        """
-        Return summary diagnostics for the adelic system.
+        Return a complete adelic diagnostic summary.
         """
 
         return {
             "shape": self.system.shape,
             "labels": self.system.labels,
-            "component_norms": self.component_norms(),
-            "weighted_component_norms": self.weighted_component_norms(),
-            "weights": self.weight_summary(),
+            "component_norms":
+                self.component_norms(kind),
+            "weighted_component_norms":
+                self.weighted_component_norms(kind),
+            "weights":
+                self.weight_summary(),
+        }
+
+    def weight_summary(self) -> dict:
+        """
+        Return information about the adelic weight system.
+        """
+
+        weights = self.system.weight_array()
+
+        return {
+            "labels": self.system.labels,
+            "weights": tuple(
+                weights.tolist()
+            ),
+            "sum_abs_weights": float(
+                np.sum(np.abs(weights))
+            ),
+            "num_components": int(
+                len(weights)
+            ),
+        }
+
+    def weighted_component_norms(
+        self,
+        kind: str = "fro",
+    ) -> dict:
+        """
+        Return absolute-weight-scaled local component norms.
+        """
+
+        weights = self.system.weight_array()
+
+        return {
+            component.label: float(
+                abs(weight)
+                * component.operator.norm(kind)
+            )
+            for component, weight in zip(
+                self.system.components,
+                weights,
+            )
         }

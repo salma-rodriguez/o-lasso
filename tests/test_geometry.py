@@ -1,6 +1,14 @@
 import numpy as np
+import pytest
 
 from spectral_operators.core.algebra import LinearOperator
+from spectral_operators.core.exceptions import OperatorError
+from spectral_operators.core.utilities import (
+    readonly_array,
+    require_nonnegative_integer,
+    require_positive_integer,
+    require_probability
+)
 from spectral_operators.geometry import (
     SymmetryAnalyzer,
     BoundaryAnalyzer,
@@ -100,3 +108,39 @@ def test_geometry_analyzer_ratios():
     assert ratios["relative_symmetric_defect"] == 0.0
     assert ratios["relative_hermitian_defect"] == 0.0
     assert ratios["locality_ratio"] == 1.0
+
+
+def test_boundary_mask_is_read_only():
+    operator = LinearOperator(
+        np.ones((4, 4))
+    )
+    analyzer = BoundaryAnalyzer(
+        operator,
+        width=1,
+    )
+
+    mask = analyzer.boundary_mask()
+
+    with pytest.raises(ValueError):
+        mask[0, 0] = False
+
+
+def test_negative_bandwidth_rejected():
+    operator = LinearOperator(
+        np.eye(3)
+    )
+    analyzer = LocalityAnalyzer(operator)
+
+    with pytest.raises(OperatorError):
+        analyzer.band_mask(-1)
+
+
+def test_effective_bandwidth_dense_matrix():
+    operator = LinearOperator(
+        np.ones((3, 3))
+    )
+    analyzer = LocalityAnalyzer(operator)
+
+    assert analyzer.effective_bandwidth(
+        threshold=1.0
+    ) == 2

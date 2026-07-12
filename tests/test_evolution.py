@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from spectral_operators.core.algebra import LinearOperator
 from spectral_operators.evolution import (
@@ -88,3 +89,57 @@ def test_evolution_analyzer_semigroup():
         E.propagate_semigroup(v, 0.0),
         v,
     )
+
+
+from spectral_operators import (
+    EvolutionAnalyzer,
+    LinearOperator,
+    SemigroupEvolution,
+    UnitaryEvolution,
+)
+from spectral_operators.core.exceptions import (
+    DimensionMismatchError,
+    NonSquareOperatorError,
+    OperatorError,
+)
+
+
+def test_unitary_evolution_reports_unitarity():
+    operator = LinearOperator(
+        np.diag([1.0, 2.0])
+    )
+    evolution = UnitaryEvolution(operator)
+
+    assert evolution.is_unitary(1.0)
+
+
+def test_non_square_generator_rejected():
+    operator = LinearOperator(
+        np.ones((2, 3))
+    )
+
+    with pytest.raises(NonSquareOperatorError):
+        SemigroupEvolution(operator)
+
+
+def test_invalid_state_dimension_rejected():
+    operator = LinearOperator(
+        np.eye(2)
+    )
+    evolution = SemigroupEvolution(operator)
+
+    with pytest.raises(DimensionMismatchError):
+        evolution.apply(
+            np.ones(3),
+            1.0,
+        )
+
+
+def test_nonfinite_time_rejected():
+    operator = LinearOperator(
+        np.eye(2)
+    )
+    evolution = SemigroupEvolution(operator)
+
+    with pytest.raises(OperatorError):
+        evolution.matrix(np.inf)

@@ -1,5 +1,8 @@
 import numpy as np
 
+import pytest
+
+from spectral_operators.core.utilities import DimensionMismatchError
 from spectral_operators.weights import (
     WeightOperator,
     PositionWeight,
@@ -110,3 +113,24 @@ def test_adelic_weight_as_array_returns_copy():
     arr[0] = 99
 
     assert not np.allclose(arr, A.weights)
+
+def test_weight_operator_weights_are_read_only():
+    weight = WeightOperator([1, 2, 3])
+
+    with pytest.raises(ValueError):
+        weight.weights[0] = 10
+
+
+def test_position_weight_grid_is_read_only():
+    weight = PositionWeight(N=3, L=1.0)
+
+    with pytest.raises(ValueError):
+        weight.grid[0] = 10
+
+
+def test_adelic_weight_requires_matching_length():
+    with pytest.raises(DimensionMismatchError):
+        AdelicWeight(
+            labels=["a", "b"],
+            weights=[1.0],
+        )

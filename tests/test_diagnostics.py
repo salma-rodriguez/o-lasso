@@ -1,13 +1,15 @@
 import numpy as np
+import pytest
 
 from spectral_operators.core.algebra import LinearOperator
 from spectral_operators.diagnostics import (
-    OperatorDiagnostics,
     ComparativeDiagnostics,
-    StabilityDiagnostics,
     DiagnosticReport,
+    LinearOperator,
+    OperatorDiagnostics,
+    StabilityDiagnostics,
 )
-
+from spectral_operators.core.exceptions import OperatorError
 
 def test_operator_diagnostics_algebra_summary():
     A = LinearOperator(np.diag([1.0, 2.0]), name="A")
@@ -143,3 +145,38 @@ def test_diagnostic_report_with_zeta():
 
     assert report["operator"] == "I"
     assert "spectral_zeta" in report
+
+def test_rectangular_algebra_summary_has_no_trace():
+    operator = LinearOperator(
+        np.ones((2, 3))
+    )
+
+    summary = OperatorDiagnostics(
+        operator
+    ).algebra_summary()
+
+    assert summary["trace"] is None
+    assert summary["det"] is None
+    assert summary["cond"] is None
+
+
+def test_comparative_diagnostics_rejects_empty_input():
+    with pytest.raises(OperatorError):
+        ComparativeDiagnostics([])
+
+
+def test_pairwise_distance_reports_shape_mismatch():
+    left = LinearOperator(
+        np.eye(2),
+        name="A",
+    )
+    right = LinearOperator(
+        np.eye(3),
+        name="B",
+    )
+
+    distances = ComparativeDiagnostics(
+        [left, right]
+    ).pairwise_distances()
+
+    assert distances[("A", "B")] is None

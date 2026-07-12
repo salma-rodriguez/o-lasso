@@ -1,21 +1,75 @@
 """
-spectral_operator.zeta
-======================
+spectral_operators.zeta
+=======================
 
 Zeta-oriented constructions and diagnostics.
 
-This module contains tools for connecting spectral operator data
-with zeta-style objects, spectral zeta functions, zero comparisons,
-and Hilbert--Pólya-style investigations.
+This module connects operator spectra with spectral zeta functions,
+zeta-zero data, correspondence diagnostics, and finite-dimensional
+Hilbert--Pólya-style investigations.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from .core.algebra import LinearOperator, OperatorError
-from .operators import ZetaOperator
+from .core.algebra import LinearOperator
+from .core.exceptions import OperatorError
+from .core.utilities import (
+    as_one_dimensional_array,
+    readonly_array,
+    require_nonnegative_integer,
+    require_positive_real,
+)
 from .spectrum import SpectralAnalyzer
+
+
+# ===========================================================================
+# Shared Helpers
+# ===========================================================================
+
+def _validate_operator(
+    operator: LinearOperator,
+) -> LinearOperator:
+    """
+    Validate and return a LinearOperator.
+    """
+
+    if not isinstance(operator, LinearOperator):
+        raise OperatorError(
+            "operator must be a LinearOperator."
+        )
+
+    return operator
+
+
+def _spectral_ordinates(
+    values,
+) -> np.ndarray:
+    """
+    Convert spectral values into nonnegative comparison ordinates.
+
+    Complex spectra are represented by absolute imaginary parts.
+    Real spectra are represented by absolute values.
+    """
+
+    array = as_one_dimensional_array(
+        values,
+        name="spectral values",
+        copy=True,
+        allow_empty=True,
+    )
+
+    if np.iscomplexobj(array):
+        ordinates = np.abs(array.imag)
+    else:
+        ordinates = np.abs(array)
+
+    return readonly_array(
+        ordinates,
+        name="spectral ordinates",
+        ndim=1,
+    )
 
 
 # ===========================================================================
@@ -28,9 +82,21 @@ class SpectralZeta:
 
     Computes
 
-        ζ_A(s) = Σ λ_n^{-s}
+        zeta_A(s) = sum_n lambda_n^(-s)
 
-    over nonzero eigenvalues.
+    over the retained eigenvalues.
+
+    Parameters
+    ----------
+    operator
+        Square matrix-backed operator.
+
+    discard_zeros
+        If true, eigenvalues whose absolute value is at most
+        ``zero_tol`` are removed.
+
+    zero_tol
+        Positive numerical threshold used for zero detection.
     """
 
     def __init__(
@@ -40,55 +106,83 @@ class SpectralZeta:
         discard_zeros: bool = True,
         zero_tol: float = 1e-12,
     ):
+        operator = _validate_operator(operator)
+        zero_tol = require_positive_real(
+            zero_tol,
+            name="zero_tol",
+        )
 
-        if not isinstance(operator, LinearOperator):
-            raise OperatorError("operator must be a LinearOperator.")
-
-        self.operator = operator
-        self.discard_zeros = discard_zeros
-        self.zero_tol = zero_tol
-
-        vals = SpectralAnalyzer(operator).eigenvalues()
+        eigenvalues = SpectralAnalyzer(
+            operator
+        ).eigenvalues()
 
         if discard_zeros:
-            vals = vals[np.abs(vals) > zero_tol]
+            eigenvalues = eigenvalues[
+                np.abs(eigenvalues) > zero_tol
+            ]
 
-        self.eigenvalues = vals
-
+        object.__setattr__(self, "operator", operator)
+        object.__setattr__(
+            self,
+            "discard_zeros",
+            bool(discard_zeros),
+        )
+        object.__setattr__(self, "zero_tol", zero_tol)
+        object.__setattr__(
+            self,
+            "eigenvalues",
+            readonly_array(
+                eigenvalues,
+                name="eigenvalues",
+                ndim=1,
+            ),
+        )
 
     def evaluate(self, s):
         """
-        Evaluate the spectral zeta function at s.
+        Evaluate the spectral zeta function at ``s``.
         """
 
-        if len(self.eigenvalues) == 0:
+        if self.eigenvalues.size == 0:
             return 0.0
 
-        return np.sum(self.eigenvalues ** (-s))
-
-
-    def values(self, s_values) -> np.ndarray:
-        """
-        Evaluate spectral zeta over an array of s-values.
-        """
-
-        return np.array([
-            self.evaluate(s)
-            for s in s_values
-        ])
-
+        return np.sum(
+            self.eigenvalues ** (-s)
+        )
 
     def summary(self) -> dict:
         """
-        Return summary information.
+        Return spectral-zeta metadata.
         """
 
         return {
             "operator": self.operator.name,
-            "num_eigenvalues": int(len(self.eigenvalues)),
+            "num_eigenvalues": int(
+                len(self.eigenvalues)
+            ),
             "discard_zeros": self.discard_zeros,
             "zero_tol": self.zero_tol,
         }
+
+    def values(
+        self,
+        s_values,
+    ) -> np.ndarray:
+        """
+        Evaluate the spectral zeta function at multiple values of ``s``.
+        """
+
+        parameters = as_one_dimensional_array(
+            s_values,
+            name="s_values",
+            copy=True,
+            allow_empty=True,
+        )
+
+        return np.asarray([
+            self.evaluate(s)
+            for s in parameters
+        ])
 
 
 # ===========================================================================
@@ -97,57 +191,80 @@ class SpectralZeta:
 
 class ZetaZeroSet:
     """
-    Container for zeta zero ordinates γ_n.
+    Container for zeta-zero ordinates gamma_n.
 
-    The corresponding nontrivial zeros are interpreted as
+    The corresponding critical-line points are represented as
 
-        ρ_n = 1/2 + i γ_n.
+        rho_n = 1/2 + i gamma_n.
+
+    Notes
+    -----
+    This class stores supplied ordinates. It does not verify that the
+    values are actual nontrivial zeros of the Riemann zeta function.
     """
 
-    def __init__(self, gammas):
+    def __init__(
+        self,
+        gammas,
+    ):
+        ordinates = as_one_dimensional_array(
+            gammas,
+            name="gammas",
+            dtype=float,
+            copy=True,
+            allow_empty=True,
+        )
 
-        g = np.asarray(gammas, dtype=float)
+        if np.any(~np.isfinite(ordinates)):
+            raise OperatorError(
+                "gammas must contain only finite values."
+            )
 
-        if g.ndim != 1:
-            raise OperatorError("gammas must be one-dimensional.")
+        if np.any(ordinates < 0):
+            raise OperatorError(
+                "gammas must be nonnegative."
+            )
 
-        self.gammas = np.sort(g)
+        ordinates = np.sort(ordinates)
 
+        object.__setattr__(
+            self,
+            "gammas",
+            readonly_array(
+                ordinates,
+                name="gammas",
+                ndim=1,
+            ),
+        )
 
-    @property
-    def zeros(self) -> np.ndarray:
+    def first(
+        self,
+        n: int,
+    ) -> np.ndarray:
         """
-        Return complex zeros 1/2 + i γ_n.
+        Return a copy of the first ``n`` ordinates.
         """
 
-        return 0.5 + 1j * self.gammas
+        n = require_nonnegative_integer(
+            n,
+            name="n",
+        )
 
-
-    def first(self, n: int) -> np.ndarray:
-        """
-        Return first n ordinates.
-        """
-
-        if n < 0:
-            raise OperatorError("n must be nonnegative.")
-
-        return self.gammas[:n]
-
+        return self.gammas[:n].copy()
 
     def spacings(self) -> np.ndarray:
         """
-        Return consecutive zero spacings.
+        Return consecutive ordinate spacings.
         """
 
         return np.diff(self.gammas)
 
-
     def summary(self) -> dict:
         """
-        Return summary information.
+        Return zero-set summary information.
         """
 
-        if len(self.gammas) == 0:
+        if self.gammas.size == 0:
             return {
                 "count": 0,
                 "min_gamma": None,
@@ -159,10 +276,26 @@ class ZetaZeroSet:
 
         return {
             "count": int(len(self.gammas)),
-            "min_gamma": float(np.min(self.gammas)),
-            "max_gamma": float(np.max(self.gammas)),
-            "mean_spacing": float(np.mean(spacings)) if len(spacings) else None,
+            "min_gamma": float(
+                np.min(self.gammas)
+            ),
+            "max_gamma": float(
+                np.max(self.gammas)
+            ),
+            "mean_spacing": (
+                float(np.mean(spacings))
+                if spacings.size
+                else None
+            ),
         }
+
+    @property
+    def zeros(self) -> np.ndarray:
+        """
+        Return copies of the points ``1/2 + i gamma_n``.
+        """
+
+        return 0.5 + 1j * self.gammas
 
 
 # ===========================================================================
@@ -171,7 +304,7 @@ class ZetaZeroSet:
 
 class ZetaCorrespondence:
     """
-    Compare operator spectra with zeta-style zero ordinates.
+    Compare an operator spectrum with supplied zeta-zero ordinates.
     """
 
     def __init__(
@@ -181,46 +314,43 @@ class ZetaCorrespondence:
         *,
         ordering: str = "abs",
     ):
-
-        if not isinstance(operator, LinearOperator):
-            raise OperatorError("operator must be a LinearOperator.")
+        operator = _validate_operator(operator)
 
         if not isinstance(zeros, ZetaZeroSet):
-            raise OperatorError("zeros must be a ZetaZeroSet.")
+            raise OperatorError(
+                "zeros must be a ZetaZeroSet."
+            )
 
-        self.operator = operator
-        self.zeros = zeros
-        self.ordering = ordering
+        spectrum = SpectralAnalyzer(
+            operator
+        ).sorted_eigenvalues(ordering)
 
-        self.spectrum = SpectralAnalyzer(operator).sorted_eigenvalues(ordering)
+        object.__setattr__(self, "operator", operator)
+        object.__setattr__(self, "zeros", zeros)
+        object.__setattr__(self, "ordering", ordering)
+        object.__setattr__(
+            self,
+            "spectrum",
+            readonly_array(
+                spectrum,
+                name="spectrum",
+                ndim=1,
+            ),
+        )
 
-
-    def compare(self, n: int | None = None) -> dict:
+    def compare(
+        self,
+        n: int | None = None,
+    ) -> dict:
         """
-        Compare first n spectral values with first n zero ordinates.
+        Compare paired spectral and zeta ordinates.
         """
 
-        spec = np.asarray(self.spectrum)
+        spectral_values, zero_values = (
+            self.paired_values(n=n)
+        )
 
-        # For complex spectra, compare imaginary magnitudes by default.
-        if np.iscomplexobj(spec):
-            spec_values = np.abs(spec.imag)
-        else:
-            spec_values = np.abs(spec)
-
-        zero_values = self.zeros.gammas
-
-        m = min(len(spec_values), len(zero_values))
-
-        if n is not None:
-            if n < 0:
-                raise OperatorError("n must be nonnegative.")
-            m = min(m, n)
-
-        spec_values = spec_values[:m]
-        zero_values = zero_values[:m]
-
-        if m == 0:
+        if spectral_values.size == 0:
             return {
                 "count": 0,
                 "mean_abs_error": None,
@@ -228,36 +358,54 @@ class ZetaCorrespondence:
                 "rms_error": None,
             }
 
-        error = spec_values - zero_values
+        error = spectral_values - zero_values
 
         return {
-            "count": int(m),
-            "mean_abs_error": float(np.mean(np.abs(error))),
-            "max_abs_error": float(np.max(np.abs(error))),
-            "rms_error": float(np.sqrt(np.mean(error**2))),
+            "count": int(
+                len(spectral_values)
+            ),
+            "mean_abs_error": float(
+                np.mean(np.abs(error))
+            ),
+            "max_abs_error": float(
+                np.max(np.abs(error))
+            ),
+            "rms_error": float(
+                np.sqrt(
+                    np.mean(np.abs(error) ** 2)
+                )
+            ),
         }
 
-
-    def paired_values(self, n: int | None = None) -> tuple[np.ndarray, np.ndarray]:
+    def paired_values(
+        self,
+        n: int | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
-        Return paired spectral values and zero ordinates.
+        Return paired spectral ordinates and zeta-zero ordinates.
         """
 
-        spec = np.asarray(self.spectrum)
-
-        if np.iscomplexobj(spec):
-            spec_values = np.abs(spec.imag)
-        else:
-            spec_values = np.abs(spec)
-
+        spectral_values = _spectral_ordinates(
+            self.spectrum
+        )
         zero_values = self.zeros.gammas
 
-        m = min(len(spec_values), len(zero_values))
+        count = min(
+            len(spectral_values),
+            len(zero_values),
+        )
 
         if n is not None:
-            m = min(m, n)
+            n = require_nonnegative_integer(
+                n,
+                name="n",
+            )
+            count = min(count, n)
 
-        return spec_values[:m], zero_values[:m]
+        return (
+            spectral_values[:count].copy(),
+            zero_values[:count].copy(),
+        )
 
 
 # ===========================================================================
@@ -266,50 +414,73 @@ class ZetaCorrespondence:
 
 class HilbertPolyaAnalyzer:
     """
-    Diagnostics for Hilbert--Pólya-style spectral interpretations.
+    Finite-dimensional diagnostics for Hilbert--Pólya-style candidates.
+
+    Notes
+    -----
+    These diagnostics test necessary numerical properties such as
+    Hermiticity and spectral reality. They do not establish a
+    Hilbert--Pólya correspondence or prove the Riemann Hypothesis.
     """
 
-    def __init__(self, operator: LinearOperator):
+    def __init__(
+        self,
+        operator: LinearOperator,
+    ):
+        operator = _validate_operator(operator)
 
-        if not isinstance(operator, LinearOperator):
-            raise OperatorError("operator must be a LinearOperator.")
+        object.__setattr__(self, "operator", operator)
+        object.__setattr__(
+            self,
+            "spectrum",
+            SpectralAnalyzer(operator),
+        )
 
-        self.operator = operator
-        self.spectrum = SpectralAnalyzer(operator)
-
-
-    def is_candidate_self_adjoint(self, tol: float = 1e-10) -> bool:
+    def is_candidate_self_adjoint(
+        self,
+        tol: float = 1e-10,
+    ) -> bool:
         """
-        Check whether the operator is Hermitian/self-adjoint.
+        Check numerical Hermiticity.
         """
 
-        return self.operator.is_hermitian(tol=tol)
+        tol = require_positive_real(
+            tol,
+            name="tol",
+        )
 
+        return self.operator.is_hermitian(
+            tol=tol
+        )
 
     def real_spectrum_defect(self) -> float:
         """
-        Measure imaginary leakage of the spectrum.
-
-        For an ideal self-adjoint finite-dimensional approximation,
-        eigenvalues should be real up to numerical tolerance.
+        Measure Euclidean imaginary leakage of the spectrum.
         """
 
-        vals = self.spectrum.eigenvalues()
+        eigenvalues = self.spectrum.eigenvalues()
 
-        return float(np.linalg.norm(vals.imag))
-
+        return float(
+            np.linalg.norm(
+                eigenvalues.imag
+            )
+        )
 
     def summary(self) -> dict:
         """
-        Return Hilbert--Pólya-style diagnostic summary.
+        Return Hilbert--Pólya-style diagnostics.
         """
 
-        vals = self.spectrum.eigenvalues()
+        eigenvalues = self.spectrum.eigenvalues()
 
         return {
             "operator": self.operator.name,
             "shape": self.operator.shape,
-            "is_hermitian": self.operator.is_hermitian(),
-            "real_spectrum_defect": self.real_spectrum_defect(),
-            "num_eigenvalues": int(len(vals)),
+            "is_hermitian":
+                self.operator.is_hermitian(),
+            "real_spectrum_defect":
+                self.real_spectrum_defect(),
+            "num_eigenvalues": int(
+                len(eigenvalues)
+            ),
         }

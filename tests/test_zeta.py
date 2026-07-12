@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from spectral_operators.core.algebra import LinearOperator
 from spectral_operators.zeta import (
@@ -100,3 +101,49 @@ def test_hilbert_polya_analyzer_summary():
     assert summary["shape"] == (2, 2)
     assert summary["is_hermitian"] is True
     assert summary["num_eigenvalues"] == 2
+
+from spectral_operators import (
+    HilbertPolyaAnalyzer,
+    LinearOperator,
+    SpectralZeta,
+    ZetaCorrespondence,
+    ZetaZeroSet,
+)
+from spectral_operators.core.exceptions import OperatorError
+
+
+def test_zeta_zero_ordinates_are_read_only():
+    zeros = ZetaZeroSet([14.0, 21.0])
+
+    with pytest.raises(ValueError):
+        zeros.gammas[0] = 99.0
+
+
+def test_zeta_zero_set_rejects_negative_ordinates():
+    with pytest.raises(OperatorError):
+        ZetaZeroSet([-14.0])
+
+
+def test_paired_values_rejects_negative_count():
+    operator = LinearOperator(
+        np.diag([14.0, 21.0])
+    )
+    zeros = ZetaZeroSet([14.0, 21.0])
+    correspondence = ZetaCorrespondence(
+        operator,
+        zeros,
+        ordering="real",
+    )
+
+    with pytest.raises(OperatorError):
+        correspondence.paired_values(-1)
+
+
+def test_spectral_zeta_rejects_nonpositive_tolerance():
+    operator = LinearOperator(np.eye(2))
+
+    with pytest.raises(OperatorError):
+        SpectralZeta(
+            operator,
+            zero_tol=0.0,
+        )

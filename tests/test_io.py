@@ -1,12 +1,18 @@
 import json
-import numpy as np
 
-from spectral_operators.core.algebra import LinearOperator
-from spectral_operators.io import (
+import numpy as np
+import pytest
+
+from spectral_operators import (
     JSONSerializer,
+    LinearOperator,
     OperatorIO,
     DiagnosticIO,
     NumpyIO,
+)
+from spectral_operators.core.exceptions import (
+    OperatorError,
+    SerializationError,
 )
 
 
@@ -112,3 +118,70 @@ def test_numpy_io_save_and_load_npz(tmp_path):
 
     assert np.allclose(loaded["a"], a)
     assert np.allclose(loaded["b"], b)
+
+def test_json_serializer_complex_array_round_trip():
+    values = np.array([
+        1 + 2j,
+        3 - 4j,
+    ])
+
+    encoded = JSONSerializer.dumps(values)
+    decoded = JSONSerializer.loads(encoded)
+
+    assert np.allclose(
+        np.asarray(decoded),
+        values,
+    )
+
+
+def test_operator_io_complex_matrix_round_trip(tmp_path):
+    path = tmp_path / "complex_operator.json"
+
+    operator = LinearOperator(
+        np.array([
+            [1 + 2j, 0],
+            [0, 3 - 1j],
+        ]),
+        name="ComplexA",
+    )
+
+    OperatorIO.save_json(
+        operator,
+        path,
+    )
+    loaded = OperatorIO.load_json(
+        path
+    )
+
+    assert loaded.name == "ComplexA"
+    assert np.allclose(
+        loaded.matrix,
+        operator.matrix,
+    )
+
+
+def test_json_loads_rejects_invalid_json():
+    with pytest.raises(
+        SerializationError
+    ):
+        JSONSerializer.loads(
+            "{invalid json}"
+        )
+
+
+def test_operator_io_requires_matrix():
+    with pytest.raises(
+        SerializationError
+    ):
+        OperatorIO.from_dict({
+            "name": "A",
+        })
+
+
+def test_numpy_io_rejects_empty_npz_save(tmp_path):
+    path = tmp_path / "empty.npz"
+
+    with pytest.raises(
+        OperatorError
+    ):
+        NumpyIO.save_npz(path)

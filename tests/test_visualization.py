@@ -1,13 +1,17 @@
 import numpy as np
+import pytest
 
 from spectral_operators.core.algebra import LinearOperator
 from spectral_operators.zeta import ZetaZeroSet, ZetaCorrespondence
-from spectral_operators.visualization import (
-    SpectrumData,
-    MatrixData,
+from spectral_operators import (
     GeometryData,
-    ZetaData,
+    LinearOperator,
+    MatrixData,
+    SpectrumData,
     VisualizationBundle,
+    ZetaCorrespondence,
+    ZetaData,
+    ZetaZeroSet,
 )
 
 
@@ -105,3 +109,68 @@ def test_visualization_bundle_as_dict():
     assert "matrix" in d
     assert "geometry" in d
     assert "diagnostics" in d
+
+
+def test_spectrum_points_are_read_only():
+    operator = LinearOperator(
+        np.diag([1.0, 2.0])
+    )
+    data = SpectrumData(
+        operator,
+        ordering="real",
+    )
+
+    points = data.complex_points()
+
+    with pytest.raises(ValueError):
+        points[0, 0] = 99.0
+
+
+def test_matrix_components_are_read_only():
+    operator = LinearOperator(
+        np.eye(2)
+    )
+    data = MatrixData(operator)
+
+    real = data.real()
+
+    with pytest.raises(ValueError):
+        real[0, 0] = 99.0
+
+
+def test_visualization_bundle_preserves_boundary_width():
+    operator = LinearOperator(
+        np.eye(4)
+    )
+    bundle = VisualizationBundle(operator)
+
+    data = bundle.as_dict(
+        boundary_width=2,
+        bandwidth=0,
+    )
+
+    assert (
+        data["geometry"]["boundary_width"]
+        == 2
+    )
+
+
+def test_zeta_error_series_is_read_only():
+    operator = LinearOperator(
+        np.diag([14.0, 21.0])
+    )
+    zeros = ZetaZeroSet(
+        [14.0, 21.0]
+    )
+    correspondence = ZetaCorrespondence(
+        operator,
+        zeros,
+        ordering="real",
+    )
+
+    errors = ZetaData(
+        correspondence
+    ).error_series()
+
+    with pytest.raises(ValueError):
+        errors[0] = 99.0

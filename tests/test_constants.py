@@ -1,17 +1,20 @@
 from spectral_operators.constants import (
-    DEFAULT_TOL,
-    DEFAULT_ZERO_TOL,
+    AUTHOR,
+    DEFAULT_BOUNDARY_WIDTH,
+    DEFAULT_DPI,
+    DEFAULT_FIGSIZE,
+    DEFAULT_NORMALIZE,
     DEFAULT_NORM,
     DEFAULT_ORDERING,
-    DEFAULT_BOUNDARY_WIDTH,
-    DEFAULT_NORMALIZE,
-    DEFAULT_FIGSIZE,
-    DEFAULT_DPI,
+    DEFAULT_TOL,
+    DEFAULT_ZERO_TOL,
+    EvolutionType,
+    LICENSE,
+    Ordering,
     PACKAGE_NAME,
     PACKAGE_VERSION,
-    Ordering,
+    PROJECT_NAME,
     WeightRule,
-    EvolutionType,
 )
 
 
@@ -33,8 +36,11 @@ def test_plotting_defaults():
 
 
 def test_package_metadata():
+    assert PROJECT_NAME == "operatorlab"
     assert PACKAGE_NAME == "spectral_operators"
     assert isinstance(PACKAGE_VERSION, str)
+    assert AUTHOR == "Salma Y. Rodriguez"
+    assert LICENSE == "MIT"
 
 
 def test_ordering_enum_values():
@@ -54,3 +60,13 @@ def test_weight_rule_enum_values():
 def test_evolution_type_enum_values():
     assert EvolutionType.UNITARY.value == "unitary"
     assert EvolutionType.SEMIGROUP.value == "semigroup"
+
+def test_default_ordering_is_supported():
+    assert DEFAULT_ORDERING in {
+        ordering.value
+        for ordering in Ordering
+    }
+
+
+def test_default_norm_is_supported():
+    assert DEFAULT_NORM == "fro"
