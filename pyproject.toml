@@ -4,27 +4,36 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spectral-operators"
-version = "0.1.0"
+version = "0.1.1"
 description = "A modular Python framework for spectral operator theory, numerical linear algebra, and scientific computing."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
+
+username = "salma-rodriguez"
+
 authors = [
     { name = "Salma Y. Rodriguez" }
 ]
+
 keywords = [
+    "operator theory",
     "spectral theory",
+    "linear algebra",
     "linear operators",
+    "numerical analysis"
     "numerical linear algebra",
     "scientific computing",
-    "operator theory",
+    "stochastic operators"
     "riemann hypothesis"
 ]
+
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Mathematics",
     "Topic :: Scientific/Engineering :: Physics",
@@ -37,18 +46,28 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "build",
     "pytest",
     "pytest-cov"
 ]
 
-[project.urls]
-Homepage = "https://github.com/salma-rodriguez/spectral-universe"
-Repository = "https://github.com/<your-username>/spectral-universe"
-Issues = "https://github.com/<your-username>/spectral-universe/issues"
+[project.urls] # TEMPORARY as project will eventually find a permanent location.
+Homepage = "https://github.com/salma-rodriguez/openoperatorlab" # HomePage subject to change!
+Repository = "https://github.com/salma-rodriguez/spectral-universe" # Repository subject to change!
+Issues = "https://github.com/salma-rodriguez/spectral-universe/issues" # Issues subject to change!
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["spectral_operators*"]
+include = [
+    "operator_core*",
+    "spectral_operators*",
+    "stochastic_operators*",
+]
+exclude = [
+    "tests*",
+    "docs*",
+    "examples*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
