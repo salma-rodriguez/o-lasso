@@ -352,7 +352,7 @@ class StationaryAnalyzer:
             ),
             tol=max(
                 self.tol,
-                1e-15,
+                np.finfo(float).eps,
             ),
             lsmr_tol="auto",
         )
