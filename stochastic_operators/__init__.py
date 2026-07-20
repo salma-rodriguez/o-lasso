@@ -9,6 +9,14 @@ from .kernels import Kernel, StochasticKernel
 from .markov import MarkovOperator
 from .monte_carlo import (
     MonteCarloResult,
+    empirical_distribution,
+    empirical_hitting_probability,
+    empirical_hitting_time,
+    empirical_return_time,
+    empirical_stationary_distribution,
+    empirical_transition_matrix,
+    simulate_chain,
+    simulate_paths,
 )
 from .operators import (
     StochasticConvention,
@@ -23,6 +31,14 @@ __all__ = [
     "MarkovGenerator",
     "MarkovOperator",
     "MonteCarloResult",
+    "empirical_distribution",
+    "empirical_hitting_probability",
+    "empirical_hitting_time",
+    "empirical_return_time",
+    "empirical_stationary_distribution",
+    "empirical_transition_matrix",
+    "simulate_chain",
+    "simulate_paths",
     "StochasticAnalyzer",
     "StochasticConvention",
     "StochasticKernel",

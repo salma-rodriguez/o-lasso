@@ -39,4 +39,10 @@ __all__ = [
     "State",
     "simulate_chain",
     "simulate_paths",
+    "empirical_distribution",
+    "empirical_transition_matrix",
+    "empirical_stationary_distribution",
+    "empirical_hitting_probability",
+    "empirical_hitting_time",
+    "empirical_return_time",
 ]
