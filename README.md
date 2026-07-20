@@ -5,7 +5,29 @@ with the vision of creating an ecosystem for operator theory, this "framework" h
 mathematical stack: from spaces, to fields to functional analytic systems and operators, to assist the scientific 
 community, in bona fide, to make progress in $RH$ as well as other analysis problems of interest. This library is 
 released exclusively as a gesture of goodwill, although the author reserves copyright over the research manuscripts 
-that inspired this major work.
+that inspired this major work.*
+
+Since software engineering works in reverse to mathematics, we are implementing the **operators** before we get to 
+**fields** and end with mathematical vector **spaces** and operational scalars. This is contrary to mathematics, 
+because a mathematician would typically begin with the space, whether it is a basic linear space, quadratic, cubic, 
+quartic, n-ic or some more complicated spaces, such as Hilbert-Pólya spaces, Banach spaces, Laplacian spaces or Sobolev
+spaces.
+
+All said and done, a complete O-LASSO has the following structure:
+
+1. Concrete Operators
+           ↓
+2. Abstract Operator Interface
+           ↓
+3. Scalar Fields
+           ↓
+4. Concrete Spaces
+           ↓
+5. Abstract Spaces
+
+**Abstract Spaces** are the interface to what a mathematician would use, to then work their way in 
+*retrospective reverse order* (RRO) to construct a concrete operator, any corresponding spectrum and other 
+more-specific mathematical objects.
 
 ---
 
