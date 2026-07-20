@@ -274,6 +274,35 @@ def _infer_states(
     return tuple(ordered)
 
 
+def _resolve_data_states(
+    data: MonteCarloResult | Sequence[State],
+    paths: Paths,
+    *,
+    states: Sequence[State] | None,
+) -> tuple[State, ...]:
+    """
+    Resolve the state space using explicit states, result metadata,
+    or observed-state inference, in that order.
+    """
+
+    if states is not None:
+        return _resolve_states(
+            paths,
+            states=states,
+        )
+
+    if isinstance(data, MonteCarloResult) and data.states is not None:
+        return _resolve_states(
+            paths,
+            states=data.states,
+        )
+
+    return _resolve_states(
+        paths,
+        states=None,
+    )
+
+
 def _resolve_states(
     paths: Paths,
     *,
@@ -829,8 +858,10 @@ def empirical_hitting_probability(
     """
 
     paths = _extract_paths(data)
-    frozen_states = _resolve_states(
-        paths,
+
+    frozen_states = _resolve_data_states(
+        data=data,
+        paths=paths,
         states=states,
     )
 
@@ -838,6 +869,7 @@ def empirical_hitting_probability(
         include_initial,
         name="include_initial",
     )
+
     target = _validate_target(
         target,
         states=frozen_states,
@@ -910,8 +942,10 @@ def empirical_hitting_time(
     """
 
     paths = _extract_paths(data)
-    frozen_states = _resolve_states(
-        paths,
+
+    frozen_states = _resolve_data_states(
+        data=data,
+        paths=paths,
         states=states,
     )
 
@@ -919,6 +953,7 @@ def empirical_hitting_time(
         include_initial,
         name="include_initial",
     )
+
     target = _validate_target(
         target,
         states=frozen_states,
