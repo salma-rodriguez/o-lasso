@@ -16,13 +16,13 @@ spaces.
 All said and done, a complete O-LASSO has the following structure:
 
 Concrete Operators<br>
-        ↓<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br>
 Abstract Operator Interface<br>
-        ↓<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br>
 Scalar Fields<br>
-        ↓<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br>
 Concrete Spaces<br>
-        ↓<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓<br>
 Abstract Spaces<br>
 
 **Abstract Spaces** are the interface to what a mathematician would use, to then work their way in 
