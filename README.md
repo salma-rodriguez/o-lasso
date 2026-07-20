@@ -3,7 +3,7 @@
 *Beyond a modular Python framework for operator theory, numerical linear algebra, and scientific computing, written 
 with the vision of creating an ecosystem for operator theory, this "framework" has been expanded to include the entire 
 mathematical stack: from spaces, to fields to functional analytic systems and operators, to assist the scientific 
-community, in bona fide, to make progress in $RH$ as well as other analysis problems of interest. This library is 
+community, in bona fide, to make progress in **RH** as well as other analysis problems of interest. This library is 
 released exclusively as a gesture of goodwill, although the author reserves copyright over the research manuscripts 
 that inspired this major work.*
 
